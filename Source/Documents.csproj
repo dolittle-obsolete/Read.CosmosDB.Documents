@@ -1,0 +1,13 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard1.6</TargetFramework>
+    <AssemblyName>doLittle.Read.CosmosDB.Documents</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="doLittle" Version="2.0.0-*" />
+    <PackageReference Include="doLittle.Mapping" Version="2.0.0-*" />
+    <PackageReference Include="doLittle.JSON" Version="2.0.0-*" />
+    <PackageReference Include="Microsoft.Azure.DocumentDB.Core" Version="1.5.0" />
+  </ItemGroup>
+  <Import Project="../Build/MSBuild/default.props" />
+</Project>
