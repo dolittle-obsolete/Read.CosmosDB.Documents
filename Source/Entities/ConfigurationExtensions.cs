@@ -3,8 +3,8 @@
  *  Licensed under the MIT License. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 using System;
-using doLittle.Read.CosmosDB.Documents;
-using doLittle.Read.CosmosDB.Documents.Entities;
+using doLittle.Read.DocumentDB;
+using doLittle.Read.DocumentDB.Entities;
 
 namespace doLittle.Configuration
 {

@@ -5,6 +5,7 @@
 using System;
 using System.Linq;
 using doLittle.Entities;
+using doLittle.Execution;
 using doLittle.DependencyInversion;
 using Microsoft.Azure.Documents;
 using Microsoft.Azure.Documents.Client;
@@ -13,15 +14,19 @@ using doLittle.JSON.Serialization;
 using doLittle.Serialization;
 using doLittle.JSON.Concepts;
 using doLittle.JSON.Events;
+using System.Collections.Generic;
 
-namespace doLittle.Read.CosmosDB.Documents.Entities
+namespace doLittle.Read.DocumentDB.Entities
 {
     /// <summary>
     /// Represents an implementation of <see cref="IEntityContextConnection"/>
     /// </summary>
+    [Singleton]
     public class EntityContextConnection : IEntityContextConnection
     {
-        EntityContextConfiguration _configuration;
+
+        readonly EntityContextConfiguration _configuration;
+        readonly Dictionary<string, DocumentCollection> _collections;
         
 
         /// <summary>
@@ -33,6 +38,7 @@ namespace doLittle.Read.CosmosDB.Documents.Entities
         {
             _configuration = configuration;
             CollectionStrategy = collectionStrategy;
+            _collections = new Dictionary<string, DocumentCollection>();
         }
 
         /// <summary>
@@ -82,7 +88,8 @@ namespace doLittle.Read.CosmosDB.Documents.Entities
         {
             DocumentCollection collection = null;
 
-            
+            if( _collections.ContainsKey(name)) return _collections[name];
+
 
             Client.ReadDocumentCollectionFeedAsync(Database.SelfLink)
                 .ContinueWith(f => {
@@ -96,17 +103,20 @@ namespace doLittle.Read.CosmosDB.Documents.Entities
             if (collection == null)
             {
                 collection = new DocumentCollection { Id = name };
+                CollectionStrategy.ConfigureCollectionForCreation(collection);
                 Client
                     .CreateDocumentCollectionAsync(Database.SelfLink, collection)
                     .ContinueWith(r => collection = r.Result.Resource)
                     .Wait();
             }
 
+            _collections[name] = collection;
+
             return collection;
 
         }
 
-        /// <inheritdoc/>
+#pragma warning disable 1591 // Xml Comments
         public void Initialize(IContainer container)
         {
             var serializerSettings = new JsonSerializerSettings();
@@ -129,5 +139,6 @@ namespace doLittle.Read.CosmosDB.Documents.Entities
                     .Wait();
             }
         }
+#pragma warning restore 1591 // Xml Comments
     }
 }

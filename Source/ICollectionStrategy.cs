@@ -5,8 +5,9 @@
 using System;
 using System.Linq;
 using Microsoft.Azure.Documents;
+using Microsoft.Azure.Documents.Client;
 
-namespace doLittle.Read.CosmosDB.Documents
+namespace doLittle.Read.DocumentDB
 {
     /// <summary>
     /// Defines a strategy to be used for dealing with entities and their relation to collections
@@ -28,6 +29,20 @@ namespace doLittle.Read.CosmosDB.Documents
         string CollectionNameFor(Type type);
 
         /// <summary>
+        /// Handle the <see cref="FeedOptions"/> typically used when querying
+        /// </summary>
+        /// <typeparam name="T">Type to handle queryable for</typeparam>
+        /// <param name="feedOptions"></param>
+        void HandleFeedOptionsFor<T>(FeedOptions feedOptions);
+
+        /// <summary>
+        /// Handle the <see cref="RequestOptions"/> typically used when querying
+        /// </summary>
+        /// <typeparam name="T">Type to handle queryable for</typeparam>
+        /// <param name="requestOptions"></param>
+        void HandleRequestOptionsFor<T>(RequestOptions requestOptions);
+
+        /// <summary>
         /// Handle queryable for a specific type
         /// </summary>
         /// <typeparam name="T">Type to handle queryable for</typeparam>
@@ -41,5 +56,11 @@ namespace doLittle.Read.CosmosDB.Documents
         /// <typeparam name="T">Type to handle for</typeparam>
         /// <param name="document">Document to handle</param>
         void HandleDocumentFor<T>(Document document);
+
+        /// <summary>
+        /// Method for configuring details for the collection strategy at the creation of the collection
+        /// </summary>
+        /// <param name="collection"><see cref="DocumentCollection"/> to configure</param>
+        void ConfigureCollectionForCreation(DocumentCollection collection);
     }
 }

@@ -6,13 +6,19 @@ using System;
 using doLittle.Configuration;
 using doLittle.Entities;
 
-namespace doLittle.Read.CosmosDB.Documents.Entities
+namespace doLittle.Read.DocumentDB.Entities
 {
     /// <summary>
     /// Implements the <see cref="IEntityContextConfiguration"/> specific for the DocumentDB support
     /// </summary>
     public class EntityContextConfiguration : IEntityContextConfiguration
     {
+        /// <summary>
+        /// Gets the property used to identify document type
+        /// </summary>
+        public const string DocumentTypeProperty = "_DOCUMENT_TYPE";
+
+
         /// <summary>
         /// Gets or sets the url endpoint for the database server
         /// </summary>
@@ -29,10 +35,10 @@ namespace doLittle.Read.CosmosDB.Documents.Entities
         public string AuthorizationKey { get; set; }
 
 
-        /// <inheritdoc/>
+#pragma warning disable 1591 // Xml Comments
         public Type EntityContextType { get { return typeof(EntityContext<>); } }
 
-        /// <inheritdoc/>
         public IEntityContextConnection Connection { get; set; }
+#pragma warning restore 1591 // Xml Comments
     }
 }

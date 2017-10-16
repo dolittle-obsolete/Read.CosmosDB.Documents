@@ -4,10 +4,10 @@
  *--------------------------------------------------------------------------------------------*/
 using System.Linq;
 using doLittle.Read;
-using doLittle.Read.CosmosDB.Documents.Entities;
+using doLittle.Read.DocumentDB.Entities;
 using Microsoft.Azure.Documents.Linq;
 
-namespace doLittle.Read.CosmosDB.Documents
+namespace doLittle.Read.DocumentDB
 {
     /// <summary>
     /// Represents an implementation of <see cref="IQueryProviderFor{T}"/>
@@ -26,7 +26,7 @@ namespace doLittle.Read.CosmosDB.Documents
         }
 
 
-        /// <inheritdoc/>
+#pragma warning disable 1591 // Xml Comments
         public QueryProviderResult Execute(IDocumentQuery query, PagingInfo paging)
         {
             var queryable = query as IQueryable;
@@ -38,7 +38,7 @@ namespace doLittle.Read.CosmosDB.Documents
                 .Wait();
 
             /*
-             * Todo: As of 12th of October 2017 - this is not supported by the DocumentDB Linq Provider or DocumentDB itself!
+             * Todo: As of 12th of October - this is not supported by the DocumentDB Linq Provider or DocumentDB itself!
             if (paging.Enabled)
             {
                 var start = paging.Size * paging.Number;
@@ -49,5 +49,6 @@ namespace doLittle.Read.CosmosDB.Documents
 
             return result;
         }
+#pragma warning restore 1591 // Xml Comments
     }
 }

@@ -4,9 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 using System;
 using System.Linq;
+using doLittle.Read.DocumentDB.Entities;
 using Microsoft.Azure.Documents;
+using Microsoft.Azure.Documents.Client;
 
-namespace doLittle.Read.CosmosDB.Documents
+namespace doLittle.Read.DocumentDB
 {
     /// <summary>
     /// Represents an implementation of <see cref="ICollectionStrategy"/> that 
@@ -14,6 +16,8 @@ namespace doLittle.Read.CosmosDB.Documents
     /// </summary>
     public class MultipleEntitiesInOneCollection : ICollectionStrategy
     {
+        static string _partitionKey = $"{EntityContextConfiguration.DocumentTypeProperty}";
+        
         const string _collectionName = "Entities";
 
         /// <inheritdoc/>
@@ -39,7 +43,25 @@ namespace doLittle.Read.CosmosDB.Documents
         public void HandleDocumentFor<T>(Document document)
         {
             var documentType = typeof(T).Name;
-            document.SetPropertyValue("_DOCUMENT_TYPE", documentType);
+            document.SetPropertyValue(EntityContextConfiguration.DocumentTypeProperty, documentType);
+        }
+
+        /// <inheritdoc/>
+        public void ConfigureCollectionForCreation(DocumentCollection collection)
+        {
+            collection.PartitionKey.Paths.Add(_partitionKey);
+        }
+
+        /// <inheritdoc/>
+        public void HandleFeedOptionsFor<T>(FeedOptions feedOptions)
+        {
+            feedOptions.PartitionKey = new PartitionKey(typeof(T).Name);
+        }
+
+        /// <inheritdoc/>
+        public void HandleRequestOptionsFor<T>(RequestOptions requestOptions)
+        {
+            requestOptions.PartitionKey = new PartitionKey(typeof(T).Name);
         }
     }
 }

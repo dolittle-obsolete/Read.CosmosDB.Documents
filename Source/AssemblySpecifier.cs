@@ -6,19 +6,20 @@ using doLittle.Assemblies;
 using doLittle.Assemblies.Configuration;
 using doLittle.Assemblies.Rules;
 
-namespace doLittle.Read.CosmosDB.Documents.DocumentDB
+namespace doLittle.Read.DocumentDB
 {
     /// <summary>
     /// Reperesents an <see cref="ICanSpecifyAssemblies">assembly specifier</see> for client aspects
     /// </summary>
     public class AssemblySpecifier : ICanSpecifyAssemblies
     {
-        /// <inheritdoc/>
+#pragma warning disable 1591 // Xml Comments
         public void Specify(IAssemblyRuleBuilder builder)
         {
             builder.ExcludeAssembliesStartingWith(
                 "Microsoft.Azure.DocumentDB.Core"
             );
         }
+#pragma warning disable 1591 // Xml Comments
     }
 }

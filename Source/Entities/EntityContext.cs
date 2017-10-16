@@ -3,20 +3,24 @@
  *  Licensed under the MIT License. See LICENSE in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Dynamic;
+using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Runtime.Serialization.Formatters;
-using System.IO;
+using System.Text;
 using doLittle.Concepts;
 using doLittle.Entities;
 using doLittle.Collections;
+using doLittle.Reflection;
 using doLittle.Mapping;
+using doLittle.Serialization;
 using Microsoft.Azure.Documents;
 using Microsoft.Azure.Documents.Client;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Serialization;
 
-namespace doLittle.Read.CosmosDB.Documents.Entities
+namespace doLittle.Read.DocumentDB.Entities
 {
     /// <summary>
     /// Represents an implementation of <see cref="IEntityContext{T}"/> specifically for DocumentDB
@@ -24,17 +28,20 @@ namespace doLittle.Read.CosmosDB.Documents.Entities
     /// <typeparam name="T">Type of entity</typeparam>
     public class EntityContext<T> : IEntityContext<T>
     {
-        EntityContextConnection _connection;
-        DocumentCollection _collection;
-        IMapper _mapper;
+        readonly EntityContextConnection _connection;
+        readonly DocumentCollection _collection;
+        readonly IMapper _mapper;
+        readonly ISerializer _serializer;
 
         /// <summary>
         /// Initializes a new instance of <see cref="EntityContext{T}"/>
         /// </summary>
         /// <param name="connection"><see cref="EntityContextConnection"/> to use</param>
         /// <param name="mapper">Mapper to use for mapping objects to documents</param>
-        public EntityContext(EntityContextConnection connection, IMapper mapper)
+
+        public EntityContext(EntityContextConnection connection, IMapper mapper, ISerializer serializer)
         {
+            _serializer = serializer;
             _connection = connection;
             _collection = connection.GetCollectionFor(typeof(T));
             _mapper = mapper;
@@ -45,8 +52,11 @@ namespace doLittle.Read.CosmosDB.Documents.Entities
         {
             get
             {
-                var queryable = _connection.Client.CreateDocumentQuery<T>(_collection.DocumentsLink) as IQueryable<T>;
+                var feedOptions = new FeedOptions();
+                _connection.CollectionStrategy.HandleFeedOptionsFor<T>(feedOptions);
+                var queryable = _connection.Client.CreateDocumentQuery<T>(_collection.DocumentsLink, feedOptions) as IQueryable<T>;
                 queryable = _connection.CollectionStrategy.HandleQueryableFor<T>(queryable);
+
                 return queryable;
             }
         }
@@ -59,76 +69,56 @@ namespace doLittle.Read.CosmosDB.Documents.Entities
         /// <inheritdoc/>
         public void Insert(T entity)
         {
-            //var document = _mapper.Map<Document, T>(entity);
-
             var documentType = typeof(T).Name;
             var document = new Document();
-
-            var properties = typeof(T).GetTypeInfo().GetProperties();
-            properties.ForEach(p =>
-            {
-                var value = p.GetValue(entity);
-
-                if (p.PropertyType.IsConcept()) value = value.GetConceptValue();
-
-                if (p.Name.ToLowerInvariant() == "id")
-                    document.Id = value.ToString();
-                else
-                    document.SetPropertyValue(p.Name, value);
-            });
-            document.SetPropertyValue("_DOCUMENT_TYPE", documentType);
-
-            var result = _connection.Client.CreateDocumentAsync(_collection.DocumentsLink, document).Result;
-
-            //_connection.Client.CreateDocumentAsync(_collection.DocumentsLink, entity);
+            PopulateDocumentFrom(document, entity);
+            var result = _connection.Client.CreateDocumentAsync(_collection.DocumentsLink, document, GetRequestOptions()).Result;
         }
 
         /// <inheritdoc/>
         public void Update(T entity)
         {
-            var properties = typeof(T).GetTypeInfo().GetProperties();
-            var idProperty = properties.Where(a => a.Name.ToLowerInvariant() == "id").AsEnumerable().FirstOrDefault();
-            var id = idProperty.GetValue(entity);
-
-            Document document = _connection.Client.CreateDocumentQuery<Document>(_collection.DocumentsLink)
-                .Where(r => r.Id == id.ToString())
-                .AsEnumerable()
-                .SingleOrDefault();
-
-            properties.ForEach(p =>
+            try
             {
-                var value = p.GetValue(entity);
+                var id = GetIdFrom(entity);
 
-                if (p.PropertyType.IsConcept()) value = value.GetConceptValue();
+                var documentUri = UriFactory.CreateDocumentUri(_connection.Database.Id, _collection.Id, id.ToString());
 
-                if (p.Name.ToLowerInvariant() != "id")
-                    document.SetPropertyValue(p.Name, value);
-            });
+                var query = GetQueryForId(id);
+                var feedOptions = new FeedOptions { MaxItemCount = 1 };
+                _connection.CollectionStrategy.HandleFeedOptionsFor<T>(feedOptions);
+                var document = _connection.Client.CreateDocumentQuery<Document>(_collection.DocumentsLink, query, feedOptions)
+                    .AsEnumerable()
+                    .FirstOrDefault();
 
-            //var result = _connection.Client.ReplaceDocumentAsync(_collection.DocumentsLink, entity).Result;
-            var result = _connection.Client.ReplaceDocumentAsync(document.SelfLink, document).Result;
+                PopulateDocumentFrom(document, entity);
+                document.Id = id.ToString();
+                var result = _connection.Client.ReplaceDocumentAsync(documentUri, document, GetRequestOptions()).Result;
+            }
+            catch (Exception ex)
+            {
+                ex = ex;
+            }
         }
 
         /// <inheritdoc/>
         public void Delete(T entity)
         {
-            var properties = typeof(T).GetTypeInfo().GetProperties();
-            var idProperty = properties.Where(a => a.Name.ToLowerInvariant() == "id").AsEnumerable().FirstOrDefault();
-            var id = idProperty.GetValue(entity);
-            
-            Document document = _connection.Client.CreateDocumentQuery<Document>(_collection.DocumentsLink)
-                .Where(r => r.Id == id.ToString())
-                .AsEnumerable()
-                .SingleOrDefault();
-            var result = _connection.Client.DeleteDocumentAsync(document.SelfLink).Result;
+            var id = GetIdFrom(entity);
+
+            var documentUri = UriFactory.CreateDocumentUri(_connection.Database.Id, _collection.Id, id.ToString());
+
+            var requestOptions = new RequestOptions();
+            _connection.CollectionStrategy.HandleRequestOptionsFor<T>(requestOptions);
+
+            var result = _connection.Client.DeleteDocumentAsync(documentUri, requestOptions).Result;
         }
 
         /// <inheritdoc/>
         public void Save(T entity)
         {
-            var result = _connection.Client.ReplaceDocumentAsync(_collection.DocumentsLink, entity).Result;
+            Update(entity);
         }
-
 
         /// <inheritdoc/>
         public void Commit()
@@ -138,12 +128,21 @@ namespace doLittle.Read.CosmosDB.Documents.Entities
         /// <inheritdoc/>
         public T GetById<TProperty>(TProperty id)
         {
-            Document result = _connection.Client.CreateDocumentQuery<Document>(_collection.DocumentsLink, "SELECT * FROM Entities WHERE Entities.id = '" + id + "'",
-                new FeedOptions { MaxItemCount = 1 })
-                .AsEnumerable()
-                .FirstOrDefault();
-
-            return SerializeDocument(result);
+            try
+            {
+                var query = GetQueryForId(id);
+                var feedOptions = new FeedOptions { MaxItemCount = 1 };
+                _connection.CollectionStrategy.HandleFeedOptionsFor<T>(feedOptions);
+                var document = _connection.Client.CreateDocumentQuery<T>(_collection.DocumentsLink, query, feedOptions)
+                    .AsEnumerable()
+                    .FirstOrDefault();
+                return document;
+            }
+            catch (Exception ex)
+            {
+                ex = ex;
+                return default(T);
+            }
         }
 
         /// <inheritdoc/>
@@ -156,25 +155,76 @@ namespace doLittle.Read.CosmosDB.Documents.Entities
         {
         }
 
-        static T SerializeDocument(Document doc)
+        string GetQueryForId<TProperty>(TProperty id)
         {
-            T document;
-            var serializer = new JsonSerializer()
-            {
-                ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
-                TypeNameAssemblyFormatHandling = TypeNameAssemblyFormatHandling.Simple,
-                ConstructorHandling = ConstructorHandling.AllowNonPublicDefaultConstructor,
-                NullValueHandling = NullValueHandling.Ignore
-            };
-
-            if (doc != null)
-            {
-                document = serializer.Deserialize<T>(new JsonTextReader(new StringReader(doc.ToString())));
-
-                return document;
-            }
-
-            return default(T);
+            return $"SELECT * FROM {_collection.Id} WHERE {_collection.Id}.id = '{id}' AND {_collection.Id}.{EntityContextConfiguration.DocumentTypeProperty} = '{typeof(T).Name}'";
         }
+
+
+        RequestOptions GetRequestOptions()
+        {
+            var requestOptions = new RequestOptions();
+            _connection.CollectionStrategy.HandleRequestOptionsFor<T>(requestOptions);
+            return requestOptions;
+        }
+
+
+        object GetIdFrom(T entity)
+        {
+            var properties = typeof(T).GetTypeInfo().GetProperties();
+            var idProperty = properties.Where(a => a.Name.ToLowerInvariant() == "id").AsEnumerable().FirstOrDefault();
+            var id = idProperty.GetValue(entity);
+            return id;
+        }
+
+        void PopulateDocumentOrParentFrom(Document document, Dictionary<string, object> parent, object current)
+        {
+            var properties = current.GetType().GetTypeInfo().GetProperties();
+            properties.ForEach(p =>
+            {
+                var value = p.GetValue(current);
+                var typeInfo = p.PropertyType.GetTypeInfo();
+
+                if (p.PropertyType.IsConcept()) value = value?.GetConceptValue();
+                else if (p.PropertyType.Implements(typeof(IEnumerable)))
+                {
+                    var enumerable = ((IEnumerable)value);
+                    var arrayList = new ArrayList();
+                    foreach (var item in enumerable)
+                    {
+                        var itemAsDictionary = new Dictionary<string, object>();
+                        PopulateDocumentOrParentFrom(document, itemAsDictionary, item);
+                        arrayList.Add(itemAsDictionary);
+                    }
+                    value = arrayList.ToArray();
+                }
+                else if (!typeInfo.IsValueType && !typeInfo.IsPrimitive && typeInfo.IsClass)
+                {
+                    var cur = value;
+                    value = new Dictionary<string, object>();
+                    PopulateDocumentOrParentFrom(document, value as Dictionary<string, object>, cur);
+                }
+
+                if (p.Name.ToLowerInvariant() == "id")
+                {
+                    if( parent != null) parent["Id"] = value?.ToString();
+                    else document.Id = value?.ToString();
+                }
+                else
+                {
+                    if (parent != null) parent[p.Name] = value;
+                    else document.SetPropertyValue(p.Name, value);
+                }
+            });
+
+        }
+
+
+        void PopulateDocumentFrom(Document document, T entity)
+        {
+            PopulateDocumentOrParentFrom(document, null, entity);
+            document.SetPropertyValue(EntityContextConfiguration.DocumentTypeProperty, typeof(T).Name);
+        }
+
     }
 }
